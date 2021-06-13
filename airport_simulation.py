@@ -2,10 +2,10 @@ import simpy
 import random
 from matplotlib import pyplot as plt
 
-RANDOM_SEED = 12345678966
-OBS_TIME = 300  # Simulation time in minutes
-allow_no_baggage = False
-allow_pre_check = False
+RANDOM_SEED = 6930352520
+OBS_TIME = 500  # Simulation time in minutes
+allow_no_baggage = True
+allow_pre_check = True
 
 id_check_booth = object
 preparation_booth = object
@@ -16,6 +16,8 @@ additional_scanner = object
 list_TW = []
 list_TS = []
 list_TRES = []
+
+number_of_passengers = 0
 completed_jobs = 0
 no_bag_passengers = 0
 no_bag_passengers_completed = 0
@@ -30,6 +32,9 @@ class b_colors:
     FAIL = '\033[91m'
     BOLD = '\033[1m'
     ENDC = '\033[0m'
+    CSELECTED = '\33[7m'
+    CVIOLETBG = '\33[45m'
+    pink = '\033[95m'
 
 
 class Machines(object):
@@ -61,10 +66,10 @@ def process_a(env, name, id_machine):
         print(
             'Zone A: %s Finished ID checking at %.2f. \t || Process A SERVICE TIME: %d / WAITING TIME: %d' % (
                 name, env.now, service_time, waiting_time))
-        if allow_no_baggage and no_baggage > 5:
+        if allow_no_baggage and no_baggage >= 6:
             global no_bag_passengers
             no_bag_passengers += 1
-            print(f'{b_colors.FAIL}Zone A: %s has no baggage Proceeding to B2{b_colors.ENDC} ' % name)
+            print(f'{b_colors.CSELECTED}Zone A: %s has no baggage Proceeding to B2{b_colors.ENDC} ' % name)
             env.process(process_b2(env, name, passenger_scan_machine, arrival_time, waiting_time, service_time, True, False))
         else:
             env.process(process_b1(env, name, preparation_booth, arrival_time, waiting_time, service_time))
@@ -73,14 +78,14 @@ def process_a(env, name, id_machine):
 def process_b1(env, name, belongings_box, arrival_time, waiting_time, service_time):
     print('Zone B1: %s arrives at the Preparation booth at %.2f.' % (name, env.now))
     tw = env.now
-    print(belongings_box.service_time)
     with belongings_box.machine.request() as request:
         yield request
         tw = env.now - tw
         ts = env.now
         print('Zone B1: %s start preparing belongings %.2f.' % (name, env.now))
         # is pre-check passenger or not
-        if allow_pre_check and random.randint(0, 10) > 5:
+        if allow_pre_check and random.randint(0, 10) >= 5:
+            print(f'{b_colors.pink}Passenger %s is a member of the Pre-Check program{b_colors.ENDC}' % name)
             yield env.process(belongings_box.pre_check())
             global pre_check_passengers
             pre_check_passengers += 1
@@ -173,15 +178,15 @@ def process_d(env, name, passenger_scanner, arrival_time, waiting_time, service_
             pre_check_passengers_completed += 1
 
 
-def setup(env, allow_no_baggage, allow_pre_check):
+def setup(env):
 
+    # Assumptions
     num_servers = 3
-    number_of_passengers = 0
 
     a_time = 2
-    b1_time = 10
-    b2_time = 3
-    b3_time = 3
+    b1_time = 6
+    b2_time = 4
+    b3_time = 4
     d_time = 10
 
     # Create the airport machines
@@ -197,13 +202,15 @@ def setup(env, allow_no_baggage, allow_pre_check):
     additional_scanner = Machines(env, 1, d_time)
 
     while True:
+        global number_of_passengers
         yield env.timeout(random.expovariate(0.1))  # Poisson arrivals
         number_of_passengers += 1
         env.process(process_a(env, 'Passenger %d' % number_of_passengers, id_check_booth))
 
 
 def average(lst):
-    return sum(lst) / len(lst)
+    if len(lst) >= 1:
+        return sum(lst) / len(lst)
 
 
 # Setup and start the simulation
@@ -211,13 +218,14 @@ print('Airport Simulation \n')
 random.seed(RANDOM_SEED)
 
 env = simpy.Environment()
-env.process(setup(env, allow_no_baggage, allow_pre_check))
+env.process(setup(env))
 env.run(until=OBS_TIME)
 print(
     f'{b_colors.WARNING}\nPerformance metrics: Avg TW: %.2f, Avg TS: %.2f, Avg response time: %.2f\nCompleted %d jobs, %d with no bags and %d precheck' % (
-        average(list_TW), average(list_TS), average(list_TRES), completed_jobs, no_bag_passengers, pre_check_passengers_completed))
-print('Passengers with no baggage = %d' % no_bag_passengers)
-print('Pre check program passengers %d' % pre_check_passengers)
+        average(list_TW), average(list_TS), average(list_TRES), completed_jobs, no_bag_passengers_completed, pre_check_passengers_completed))
+print('Total Number of Passengers = %d' % number_of_passengers)
+print('Total Passengers with no baggage = %d' % no_bag_passengers)
+print('Total Pre check program passengers %d' % pre_check_passengers)
 
 plt.xlabel('Performance metrics')
 plt.plot(list_TW, label='Waiting Time')
