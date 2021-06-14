@@ -83,9 +83,9 @@ def process_a(env, name, id_machine):
             no_bag_passengers += 1
 
             print(f'{b_colors.CSELECTED}Zone A: %s has no baggage Proceeding to B2{b_colors.ENDC} ' % name)
-            b2_tw, b2_ts = yield env.process(process_b2(env, name, passenger_scan_machine))
+            yield env.process(process_b2(env, name, passenger_scan_machine))
             env.process(
-                exit_airport(name, arrival_time, waiting_time + b2_tw, service_time + b2_ts, True, False))
+                exit_airport(name, arrival_time, waiting_time, service_time, True, False))
 
         else:
             b1_tw, b1_ts, is_precheck = yield env.process(process_b1(env, name, preparation_booth))
@@ -153,7 +153,9 @@ def process_b2(env, name, passenger_scanner):
         ts = env.now - ts  # calculate service time
         print('Zone B2: %s Finished Passenger scanning %.2f.\t || Process B2 SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
             name, env.now, ts, tw))
-    return tw, ts
+
+        list_TS.append(ts)
+        list_TW.append(tw)
 
 
 def process_b3(env, name, baggage_scanner):
@@ -174,7 +176,9 @@ def process_b3(env, name, baggage_scanner):
 
         print('Zone B3: %s Finished Baggage scanning %.2f.\t || Process B3 SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
             name, env.now, ts, tw))
-        return tw, ts
+
+        list_TS.append(ts)
+        list_TW.append(tw)
 
 
 def process_d(env, name, fail_re_scan):
@@ -198,7 +202,7 @@ def process_d(env, name, fail_re_scan):
 def exit_airport(name, arrival_time, total_tw, total_ts, is_no_baggage, is_precheck):
 
     fail_flag = random.randint(0, 10)
-    if fail_flag >= 7:
+    if fail_flag >= 8:
         print(f'{b_colors.FAIL}%s Failure{b_colors.ENDC}' % name)
         d_tw, d_ts = yield env.process(process_d(env, name, additional_scanner))
         total_tw = total_tw + d_tw
