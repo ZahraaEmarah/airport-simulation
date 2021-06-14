@@ -45,10 +45,12 @@ class Machines(object):
         self.service_time = service_time
 
     def serve(self):
-        yield self.env.timeout(self.service_time + random.expovariate(0.5))  # exponential service time
+        time = self.service_time + random.expovariate(0.5)
+        yield self.env.timeout(time)  # exponential service time
 
     def pre_check(self):
-        yield self.env.timeout((self.service_time / 2) + random.expovariate(0.5))
+        time = (self.service_time/2) + random.expovariate(0.5)
+        yield self.env.timeout(time)
 
 
 def process_a(env, name, id_machine):
@@ -70,7 +72,7 @@ def process_a(env, name, id_machine):
         service_time = env.now - service_time  # calculate service time
 
         print(
-            'Zone A: %s Finished ID checking at %.2f. \t || Process A SERVICE TIME: %d / WAITING TIME: %d' % (
+            'Zone A: %s Finished ID checking at %.2f. \t || Process A SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
                 name, env.now, service_time, waiting_time))
 
         no_baggage = random.randint(0, 10)  # does this passenger have a bag or not ?
@@ -81,16 +83,15 @@ def process_a(env, name, id_machine):
             no_bag_passengers += 1
 
             print(f'{b_colors.CSELECTED}Zone A: %s has no baggage Proceeding to B2{b_colors.ENDC} ' % name)
-            b2_tw, b2_ts = yield env.process(
-                process_b2(env, name, passenger_scan_machine))
+            b2_tw, b2_ts = yield env.process(process_b2(env, name, passenger_scan_machine))
             env.process(
                 exit_airport(name, arrival_time, waiting_time + b2_tw, service_time + b2_ts, True, False))
 
         else:
-            b1_tw, b1_ts, is_pre_check = yield env.process(process_b1(env, name, preparation_booth))
-            print("b1 returned ", is_pre_check, name)
-            env.process(exit_airport(name, arrival_time, waiting_time + b1_tw, service_time + b1_ts, False,
-                                     is_pre_check))
+            b1_tw, b1_ts, is_precheck = yield env.process(process_b1(env, name, preparation_booth))
+            print("b1 returned ", name, preparation_booth.service_time, b1_ts)
+            env.process(exit_airport(name, arrival_time, waiting_time+b1_tw, service_time+b1_ts, False,
+                                     is_precheck))
 
 
 def process_b1(env, name, belongings_box):
@@ -122,15 +123,18 @@ def process_b1(env, name, belongings_box):
             pre_check = False
 
         print(
-            'Zone B1: %s Finished preparing belongings %.2f.\t || Process B1 SERVICE TIME: %d / WAITING TIME: %d' % (
+            'Zone B1: %s Finished preparing belongings %.2f.\t || Process B1 SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
                 name, env.now, ts, tw))
 
+        taskList = []
         # go to passenger scanner
-        b2_tw, b2_ts = yield env.process(process_b2(env, name, passenger_scan_machine))
+        # env.process(process_b2(env, name, passenger_scan_machine))
+        taskList.append(env.process(process_b2(env, name, passenger_scan_machine)))
         # go to baggage scanner
-        b3_tw, b3_ts = yield env.process(process_b3(env, name, baggage_scan_machine))
-
-        return (tw + b2_tw + b3_tw), (ts + b2_ts + b3_ts), pre_check
+        taskList.append(env.process(process_b3(env, name, baggage_scan_machine)))
+        # b3_tw, b3_ts = yield env.process(process_b3(env, name, baggage_scan_machine))
+        yield env.all_of(taskList)
+        return tw, ts, pre_check
 
 
 def process_b2(env, name, passenger_scanner):
@@ -147,7 +151,7 @@ def process_b2(env, name, passenger_scanner):
         print('Zone B2: %s starts Passenger scanning %.2f.' % (name, env.now))
         yield env.process(passenger_scanner.serve())
         ts = env.now - ts  # calculate service time
-        print('Zone B2: %s Finished Passenger scanning %.2f.\t || Process B2 SERVICE TIME: %d / WAITING TIME: %d' % (
+        print('Zone B2: %s Finished Passenger scanning %.2f.\t || Process B2 SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
             name, env.now, ts, tw))
     return tw, ts
 
@@ -168,7 +172,7 @@ def process_b3(env, name, baggage_scanner):
         yield env.process(baggage_scanner.serve())
         ts = env.now - ts
 
-        print('Zone B3: %s Finished Baggage scanning %.2f.\t || Process B3 SERVICE TIME: %d / WAITING TIME: %d' % (
+        print('Zone B3: %s Finished Baggage scanning %.2f.\t || Process B3 SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
             name, env.now, ts, tw))
         return tw, ts
 
@@ -186,7 +190,7 @@ def process_d(env, name, fail_re_scan):
         yield env.process(fail_re_scan.serve())
         ts = env.now - ts
 
-        print('Zone D: %s Finished Additional scanning %.2f.\t || Process D SERVICE TIME: %d / WAITING TIME: %d' % (
+        print('Zone D: %s Finished Additional scanning %.2f.\t || Process D SERVICE TIME: %.2f / WAITING TIME: %.2f' % (
             name, env.now, ts, tw))
     return tw, ts
 
@@ -200,11 +204,11 @@ def exit_airport(name, arrival_time, total_tw, total_ts, is_no_baggage, is_prech
         total_tw = total_tw + d_tw
         total_ts = total_ts + d_ts
         print(
-            f'{b_colors.OKBLUE}Zone D: %s Left the airport at %.2f\t || TOTAL_TW: %d / TOTAL TS: %d / RESPONSE TIME: %d{b_colors.ENDC}' % (
+            f'{b_colors.OKBLUE}Zone D: %s Left the airport at %.2f\t || TOTAL_TW: %.2f / TOTAL TS: %.2f / RESPONSE TIME: %.2f{b_colors.ENDC}' % (
                 name, env.now, total_tw, total_ts, (env.now - arrival_time)))
     else:
         print(
-            f'{b_colors.OKBLUE}Zone C: %s Left the airport at %.2f\t || TOTAL_TW: %d / TOTAL TS: %d / RESPONSE TIME: %d{b_colors.ENDC}' % (
+            f'{b_colors.OKBLUE}Zone C: %s Left the airport at %.2f\t || TOTAL_TW: %.2f / TOTAL TS: %.2f / RESPONSE TIME: %.2f{b_colors.ENDC}' % (
                 name, env.now, total_tw, total_ts, (env.now - arrival_time)))
 
     list_TS.append(total_ts)
